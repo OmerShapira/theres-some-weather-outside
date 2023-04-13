@@ -94,7 +94,7 @@ Y_GRAPH_BOTTOM = Y_GRAPH_TOP + 150
 
 class Weather:
     headers = {
-        'User-Agent': settings['app']['useragent']
+            'User-Agent': settings['app']['useragent']
         }
 
     def get_current_weather(self) -> Dict:
@@ -158,40 +158,53 @@ class Weather:
             temp_norm = (temp - mintemp) / (maxtemp - mintemp)
             x_temp_point = lerp(x_begin, x_end, i/(graph_sample_count - 1))
             y_temp_point = lerp(Y_GRAPH_TOP, Y_GRAPH_BOTTOM, 1-temp_norm)
-            graph_points.append((x_temp_poiNT,  y_temp_point))
+            graph_points.append((x_temp_point,  y_temp_point))
 
         draw.line(graph_points, fill=colors['h1'], width=5)
         midpoint = lerp(Y_GRAPH_TOP, Y_GRAPH_BOTTOM, 0.5)
         draw.line([(graph_points[0][0], midpoint), (graph_points[-1][0],midpoint)], fill=colors['h2'], width=1)
 
+        # Add Sampled Hours
         for i, sample_idx in enumerate(samples):
 
             period = periods[sample_idx]
 
+            # Render Time
             t = dateutil.parser.parse(period['startTime'])
             timetext = f"{t.hour:02}:00"
-            x = int(MARGIN + i * COL_DIM)
+            x = int(MARGIN + i * col_dim)
             y = Y_TIME
             draw.text((x,y), timetext, font=fonts['h3'], fill=colors['h2'])
 
+            # Render Temperature
             temp = ftoc(period['temperature'])
             temptext = f"{temp} c"
-            x = int(MARGIN + i * COL_DIM)
+            x = int(MARGIN + i * col_dim)
             y = Y_TEMP
             draw.text((x,y), temptext, font=fonts['h2'], fill=colors['h2'])
 
-            windtext = f"{period['windSpeed']}"
-            x = int(MARGIN + i * COL_DIM)
+            # Render Wind and Rain
+            wind_speed = period['windSpeed']
+            pp = period['probabilityOfPrecipitation']['value']
+            windtext = f"{wind_speed}"
+            if pp > 0:
+                windtext += f", {pp}% Rain"
+
+            x = int(MARGIN + i * col_dim)
             y = Y_WIND
             draw.text((x,y), windtext, font=fonts['h4'], fill=colors['h2'])
 
-            x = int(MARGIN + i * COL_DIM) 
+
+
+            # Render Icon
+            x = int(MARGIN + i * col_dim) 
             y = Y_ICON
             img.paste(icons[period['icon']],(x,y)) 
 
+            # Render Graph Lines
             y = Y_WIND + 24
-            x1 = MARGIN + (i + 0.5) * COL_DIM - ICON_DIM * 0.5
-            x2 = MARGIN + (i + 0.5) * COL_DIM + ICON_DIM * 0.5
+            x1 = MARGIN + (i + 0.5) * col_dim - ICON_DIM * 0.5
+            x2 = MARGIN + (i + 0.5) * col_dim + ICON_DIM * 0.5
             xmid = (x1 + x2) * 0.5
             temp_norm = (temp - mintemp) / (maxtemp - mintemp)
             ygraph = lerp(Y_GRAPH_TOP, Y_GRAPH_BOTTOM, 1-temp_norm)
@@ -219,11 +232,12 @@ def reset():
     Display.get().shutdown()
 
 def main():
+    w = Weather()
+    w.generate_message()
+    Display.get().shutdown()
 
     try:
-        w = Weather()
-        w.generate_message()
-        Display.get().shutdown()
+        pass
 
     except IOError as e:
         logging.info(e)
