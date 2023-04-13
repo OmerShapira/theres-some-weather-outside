@@ -20,13 +20,40 @@ try:
 except ModuleNotFoundError as e:
     logging.info("Waveshare modules not found. Only dry run is possible")
 
-from PIL import Image,ImageDraw,ImageFont
+from PIL import Image, ImageDraw, ImageFont
 
 # ------------------------------------------------------------------------------ 
 
 logging.basicConfig(level=logging.DEBUG)
 
 # ------------------------------------------------------------------------------ 
+
+class RenderItem:
+    def __init__(self, op, *args, **kwargs) -> None:
+        self.op = op
+        self.args = args
+        self.kwargs = kwargs
+    
+    def exec(self):
+        self.op(*args, **kwargs)
+
+class RenderList:
+    queue = []
+
+    def add_op(self, op, *args, **kwargs):
+        self.queue.append(RenderItem(op, *args, *kwargs))
+    
+    def exec(self):
+        for item in self.queue:
+            item.exec()
+
+render_graph = dict(
+    gray=RenderList(),
+    mono=RenderList()
+)
+
+# ------------------------------------------------------------------------------ 
+
 
 class Display:
 
@@ -73,8 +100,14 @@ WEATHER_API:str = f"https://api.weather.gov/gridpoints/{station}/{grid_x},{grid_
 fonts = {}
 for key, value in settings['text'].items():
     path = os.path.join(os.getcwd(), 'resources', value['source_file'])
-    logging.debug(f"loading font at { path= }")
+    logging.debug(f"loading font at { path }")
     fonts[key] = ImageFont.truetype(path, value['size'])
+
+graphics = {}
+for key, value in settings['graphics'].items():
+    path = os.path.join(os.getcwd(), 'resources', value['source_file'])
+    logging.debug(f"loading graphic '{key}' at { path }")
+    graphics[key] = Image.open(path)
 
 
 ITEMS = settings['feed']['items']
@@ -185,7 +218,7 @@ class Weather:
 
             # Render Temperature
             temp = ftoc(period['temperature'])
-            temptext = f"{temp} c"
+            temptext = f"{temp}°c"
             x = int(MARGIN + i * col_dim)
             y = Y_TEMP
             draw.text((x,y), temptext, font=fonts['h2'], fill=colors['h2'])
@@ -194,12 +227,19 @@ class Weather:
             wind_speed = period['windSpeed']
             pp = period['probabilityOfPrecipitation']['value']
             windtext = f"{wind_speed}"
-            if pp > 0:
-                windtext += f", {pp}% Rain"
+            raintext = f"{pp}%"
 
+            tab = col_dim / 5
             x = int(MARGIN + i * col_dim)
             y = Y_WIND
-            draw.text((x,y), windtext, font=fonts['h4'], fill=colors['h2'])
+            dim = 20
+            wind_small = graphics['wind'].resize((dim,dim))
+            img.paste(wind_small, (x,y), wind_small)
+            draw.text((x + tab,y), windtext, font=fonts['h4'], fill=colors['h2'])
+            if pp > 0:
+                rain_small = graphics['rain'].resize((dim,dim))
+                img.paste(rain_small, (int(x + tab * 3),y), rain_small)
+                draw.text((x + tab * 4,y), raintext, font=fonts['h4'], fill=colors['h2'])
 
             # Render Icon
             x = int(MARGIN + i * col_dim) 
