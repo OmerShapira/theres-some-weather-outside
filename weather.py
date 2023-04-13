@@ -1,13 +1,12 @@
 #!/usr/bin/python
 # -*- coding:utf-8 -*-
 from typing import Dict
-import sys
 import os
 import logging
-import time
 import traceback
 import math
 import toml
+import argparse
 
 import requests
 import dateutil.parser
@@ -16,7 +15,11 @@ from io import BytesIO
 
 # ------------------------------------------------------------------------------ 
 
-from waveshare_epd import epd7in5_V2
+try:
+    from waveshare_epd import epd7in5_V2
+except ModuleNotFoundError as e:
+    logging.info("Waveshare modules not found. Only dry run is possible")
+
 from PIL import Image,ImageDraw,ImageFont
 
 # ------------------------------------------------------------------------------ 
@@ -27,8 +30,13 @@ logging.basicConfig(level=logging.DEBUG)
 
 class Display:
 
+    w = 800
+    h = 480
+
     def init_driver(self):
         self.epd = epd7in5_V2.EPD()
+        self.w = self.epd.width
+        self.h = self.epd.height
 
     def init(self):
         logging.debug("init device")
@@ -74,9 +82,7 @@ MAX_INTERVAL = 3
 
 colors = settings['color']
 
-disp = Display.get()
-w,h = disp.epd.width, disp.epd.height
-
+w,h = Display.w, Display.h
 ICON_PAD_RATIO = 0.85
 MARGIN = 30
 ICON_DIM = int(((w - MARGIN * 2) // ITEMS) * ICON_PAD_RATIO)
@@ -104,7 +110,8 @@ class Weather:
             return {}
         return r.json()['properties']['periods']
 
-    def generate_message(self):
+    def generate_message(self) -> Image:
+
 
         periods = self.get_current_weather()
         # 'number', 'name', 'startTime', 'endTime', 'isDaytime', 'temperature', 'temperatureUnit', 'temperatureTrend', 'probabilityOfPrecipitation', 'dewpoint', 'relativeHumidity', 'windSpeed', 'windDirection', 'icon', 'shortForecast', 'detailedForecast'
@@ -136,7 +143,7 @@ class Weather:
         x = w // 2
         y = Y_HEADER
         t = dateutil.parser.parse(now['startTime'])
-        temptext = f"{t.hour:02}:00 : {ftoc(now['temperature'])} c"
+        temptext = f"{t.hour:02}:00 : {ftoc(now['temperature'])}°c"
         draw.text((x,y), temptext, font=fonts['h1'], fill=colors['h1'], anchor='mm')
 
         mintemp = min([ftoc(x['temperature']) for x in periods])
@@ -194,8 +201,6 @@ class Weather:
             y = Y_WIND
             draw.text((x,y), windtext, font=fonts['h4'], fill=colors['h2'])
 
-
-
             # Render Icon
             x = int(MARGIN + i * col_dim) 
             y = Y_ICON
@@ -212,19 +217,7 @@ class Weather:
             draw.line((x1, y, x2, y), fill=colors['h1'], width=1)
             draw.line((xmid, y + 10, xmid, ygraph-10), fill=colors['h1'], width=1)
 
-
-
-
-        bw = img.convert(mode='1')
-        disp.init()
-        #disp.clear()
-        buf = disp.epd.getbuffer(bw)
-        # time.sleep(5)
-        logging.debug("display device")
-        disp.epd.display(buf)
-        # time.sleep(5)
-        disp.sleep()
-
+        return img
 
 
 
@@ -232,8 +225,29 @@ def reset():
     Display.get().shutdown()
 
 def main():
+
+    parser = argparse.ArgumentParser("There's some weather outside")
+    parser.add_argument('--simulate', action='store_true')
+
+    args = parser.parse_args()
+
     w = Weather()
-    w.generate_message()
+    img = w.generate_message()
+    bw = img.convert(mode='1')
+
+    if args.simulate:
+        bw.save('preview.png', 'png')
+        exit()
+
+    disp = Display.get()
+    disp.init()
+    #disp.clear()
+    buf = disp.epd.getbuffer(bw)
+    # time.sleep(5)
+    logging.debug("display device")
+    disp.epd.display(buf)
+    # time.sleep(5)
+    disp.sleep()
     Display.get().shutdown()
 
     try:
@@ -247,7 +261,6 @@ def main():
         reset()
     finally:
         exit()
-
 
 
 if __name__ == '__main__':
