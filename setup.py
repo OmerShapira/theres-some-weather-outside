@@ -11,32 +11,72 @@ cwd = os.path.dirname(__file__)
 
 # ------------------------------------------------------------------------------ 
 
-errors : int = 0
-warnings : int = 0
+errors: int=0
+warnings: int=0
+
 def error(*args, **kwargs) -> None:
+    global errors
     logging.error(*args, **kwargs)
     errors += 1
 
 def warning(*args, **kwargs) -> None:
+    global warnings
     logging.warn(*args, **kwargs)
-    errors += 1
+    warnings += 1
 
 def info(*args, **kwargs) -> None:
     logging.info(*args, **kwargs)
 
 # ------------------------------------------------------------------------------ 
 
+info(f"Locating Dependencies")
+
+try:
+    from waveshare_epd import epd7in5_V2
+    info("Found Waveshare display modules")
+except ModuleNotFoundError as e:
+    error("Waveshare modules not found. Only dry run is possible")
+
+try:
+    import PIL
+    info("Found Pillow")
+except ModuleNotFoundError as e:
+    error("PIL / Pillow not found.")
+
+# ------------------------------------------------------------------------------ 
+
+try:
+    info("Checking NWS settings")
+    assert settings['nws']
+    nws = settings['nws']
+    assert nws['station']
+    assert nws['grid']
+    assert type(nws['grid']['x']) == int
+    assert type(nws['grid']['y']) == int
+except AssertionError:
+    error("NWS settings and grid information not configured. See README.md for details")
+
+# ------------------------------------------------------------------------------ 
+
 # Set up resources dir
 resource_dir = os.path.join(cwd, 'resources')
-info(f"Creating resources directory at {resource_dir}")
 if not os.path.exists(resource_dir):
-    os.mkdir(resource_dir)
+    try:
+        info(f"Creating resources directory at {resource_dir}")
+        os.mkdir(resource_dir)
+    except IOError:
+        error(f"Error creating resources directory at {resource_dir}. Do you have permissions?")
 
 # Set up cache dir
 cache_dir = os.path.join(cwd, 'cache')
-info(f"Creating cache directory at {cache_dir}")
 if not os.path.exists(cache_dir):
-    os.mkdir(cache_dir)
+    try:
+        info(f"Creating cache directory at {cache_dir}")
+        os.mkdir(cache_dir)
+    except IOError:
+        error(f"Error creating cache directory at {cache_dir}. Do you have permissions?")
+
+# ------------------------------------------------------------------------------ 
 
 # Get fonts
 for k, v in settings['text'].items():
