@@ -4,19 +4,30 @@ useremail = 'email@lol.email'
 
 [text.h1]
 source_file = 'Anton-Regular.ttf'
+web_source = 'https://github.com/google/fonts/blob/main/ofl/anton/Anton-Regular.ttf?raw=true'
 size = 90
 
 [text.h2]
-source_file = 'Font.ttc'
+source_file = 'Grotesk.ttf'
+web_source = 'https://github.com/google/fonts/blob/main/ofl/schibstedgrotesk/SchibstedGrotesk%5Bwght%5D.ttf?raw=true'
+size = 24
+
+[text.h2_symbol]
+source_file = 'NotoEmoji.ttf'
+web_source = 'https://github.com/google/fonts/blob/main/ofl/notocoloremoji/NotoColorEmoji-Regular.ttf?raw=true'
 size = 24
 
 [text.h3]
-source_file = 'Font.ttc'
+source_file = 'Grotesk.ttf'
+web_source = 'https://github.com/google/fonts/blob/main/ofl/schibstedgrotesk/SchibstedGrotesk%5Bwght%5D.ttf?raw=true'
 size = 18
 
 [text.h4]
-source_file = 'Font.ttc'
+source_file = 'Grotesk.ttf'
+web_source = 'https://github.com/google/fonts/blob/main/ofl/schibstedgrotesk/SchibstedGrotesk%5Bwght%5D.ttf?raw=true'
 size = 14
+
+
 
 [color]
 bg = 255
