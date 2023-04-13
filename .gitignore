@@ -1,2 +1,5 @@
 resources/
 cache/
+preview.png
+*.pyc
+.DS_Store
