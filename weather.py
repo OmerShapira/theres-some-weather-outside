@@ -16,17 +16,42 @@ from io import BytesIO
 
 # ------------------------------------------------------------------------------ 
 
-# picdir = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), 'pic')
-# libdir = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), 'lib')
-
-# if os.path.exists(libdir):
-#    sys.path.append(libdir)
 from waveshare_epd import epd7in5_V2
 from PIL import Image,ImageDraw,ImageFont
 
 # ------------------------------------------------------------------------------ 
 
 logging.basicConfig(level=logging.DEBUG)
+
+# ------------------------------------------------------------------------------ 
+
+class Display:
+
+    def init_driver(self):
+        self.epd = epd7in5_V2.EPD()
+
+    def init(self):
+        logging.debug("init device")
+        self.epd.init()
+
+    def clear(self):
+        logging.debug("clear device")
+        self.epd.Clear()
+
+    def sleep(self):
+        logging.debug("sleep device")
+        self.epd.sleep()
+
+    def shutdown(self):
+        self.sleep()
+        epd7in5_V2.epdconfig.module_exit()
+
+    @classmethod
+    def get(cls):
+        if not hasattr(cls, '_i'):
+            setattr(cls, '_i', cls.__new__(cls))
+            cls._i.init_driver()
+        return cls._i
 
 # ------------------------------------------------------------------------------ 
 
@@ -44,19 +69,32 @@ for key, value in settings['text'].items():
     fonts[key] = ImageFont.truetype(path, value['size'])
 
 
-ITEMS = 7
+ITEMS = settings['feed']['items']
 MAX_INTERVAL = 3
-MARGIN = 30
 
 colors = settings['color']
 
+disp = Display.get()
+w,h = disp.epd.width, disp.epd.height
+
 ICON_PAD_RATIO = 0.85
+MARGIN = 30
+ICON_DIM = int(((w - MARGIN * 2) // ITEMS) * ICON_PAD_RATIO)
+Y_HEADER = 65
+Y_BASELINE = 130
+Y_ICON = Y_BASELINE
+Y_TIME = Y_ICON + 100
+Y_TEMP = Y_TIME + 24
+Y_WIND = Y_TEMP + 24
+
+Y_GRAPH_TOP = Y_WIND + 45
+Y_GRAPH_BOTTOM = Y_GRAPH_TOP + 150
 
 # ------------------------------------------------------------------------------ 
 
 class Weather:
     headers = {
-        'User-Agent': 'Weather Panel By Omershapira'
+        'User-Agent': settings['app']['useragent']
         }
 
     def get_current_weather(self) -> Dict:
@@ -67,23 +105,19 @@ class Weather:
         return r.json()['properties']['periods']
 
     def generate_message(self):
-        disp = Display.get()
 
         periods = self.get_current_weather()
         # 'number', 'name', 'startTime', 'endTime', 'isDaytime', 'temperature', 'temperatureUnit', 'temperatureTrend', 'probabilityOfPrecipitation', 'dewpoint', 'relativeHumidity', 'windSpeed', 'windDirection', 'icon', 'shortForecast', 'detailedForecast'
-        w,h = disp.epd.width, disp.epd.height
         img = Image.new('L', (w, h), colors['bg'])
         draw = ImageDraw.Draw(img)
 
-
-        icon_dim = int(((w - MARGIN * 2) // ITEMS) * ICON_PAD_RATIO)
 
         def get_image_scaled(url):
            url_small = f"{url.split(',')[0]}?size=small"
            r = requests.get(url_small)
            b = BytesIO(r.content)
            img = Image.open(b)
-           scaled = img.resize((icon_dim, icon_dim))
+           scaled = img.resize((ICON_DIM, ICON_DIM))
            return scaled
 
         def ftoc(f) -> int:
@@ -97,15 +131,6 @@ class Weather:
         icons_to_download = set([p['icon'] for p in periods])
         icons = { addr:get_image_scaled(addr) for addr in icons_to_download }
 
-        Y_HEADER = 65
-        Y_BASELINE = 130
-        Y_ICON = Y_BASELINE
-        Y_TIME = Y_ICON + 100
-        Y_TEMP = Y_TIME + 24
-        Y_WIND = Y_TEMP + 24
-
-        Y_GRAPH_TOP = Y_WIND + 45
-        Y_GRAPH_BOTTOM = Y_GRAPH_TOP + 150
 
         now = periods[0]
         x = w // 2
@@ -122,18 +147,18 @@ class Weather:
 
         # construct fine graph
 
-        COL_DIM = (w - MARGIN * 2) // ITEMS
-        X_BEGIN = MARGIN + (0 + 0.5) * COL_DIM
-        X_END = MARGIN + (ITEMS - 1 + 0.5) * COL_DIM
+        col_dim = (w - MARGIN * 2) // ITEMS
+        x_begin = MARGIN + (0 + 0.5) * col_dim
+        x_end = MARGIN + (ITEMS - 1 + 0.5) * col_dim
         graph_sample_count = min(samples[-1] + 1, len(periods)) # need to get the last sample in
 
         graph_points = []
         for i in range(graph_sample_count):
             temp = ftoc(periods[i]['temperature'])
             temp_norm = (temp - mintemp) / (maxtemp - mintemp)
-            X_TEMP_POINT = lerp(X_BEGIN, X_END, i/(graph_sample_count - 1))
-            Y_TEMP_POINT = lerp(Y_GRAPH_TOP, Y_GRAPH_BOTTOM, 1-temp_norm)
-            graph_points.append((X_TEMP_POINT,  Y_TEMP_POINT))
+            x_temp_point = lerp(x_begin, x_end, i/(graph_sample_count - 1))
+            y_temp_point = lerp(Y_GRAPH_TOP, Y_GRAPH_BOTTOM, 1-temp_norm)
+            graph_points.append((x_temp_poiNT,  y_temp_point))
 
         draw.line(graph_points, fill=colors['h1'], width=5)
         midpoint = lerp(Y_GRAPH_TOP, Y_GRAPH_BOTTOM, 0.5)
@@ -165,8 +190,8 @@ class Weather:
             img.paste(icons[period['icon']],(x,y)) 
 
             y = Y_WIND + 24
-            x1 = MARGIN + (i + 0.5) * COL_DIM - icon_dim * 0.5
-            x2 = MARGIN + (i + 0.5) * COL_DIM + icon_dim * 0.5
+            x1 = MARGIN + (i + 0.5) * COL_DIM - ICON_DIM * 0.5
+            x2 = MARGIN + (i + 0.5) * COL_DIM + ICON_DIM * 0.5
             xmid = (x1 + x2) * 0.5
             temp_norm = (temp - mintemp) / (maxtemp - mintemp)
             ygraph = lerp(Y_GRAPH_TOP, Y_GRAPH_BOTTOM, 1-temp_norm)
@@ -188,34 +213,6 @@ class Weather:
         disp.sleep()
 
 
-class Display:
-
-
-    def init_driver(self):
-        self.epd = epd7in5_V2.EPD()
-
-    def init(self):
-        logging.debug("init device")
-        self.epd.init()
-
-    def clear(self):
-        logging.debug("clear device")
-        self.epd.Clear()
-
-    def sleep(self):
-        logging.debug("sleep device")
-        self.epd.sleep()
-
-    def shutdown(self):
-        self.sleep()
-        epd7in5_V2.epdconfig.module_exit()
-
-    @classmethod
-    def get(cls):
-        if not hasattr(cls, '_i'):
-            setattr(cls, '_i', cls.__new__(cls))
-            cls._i.init_driver()
-        return cls._i
 
 
 def reset():
@@ -223,29 +220,11 @@ def reset():
 
 def main():
 
-    print("Fetching weather")
-    w = Weather()
-    # print(w.get_current_weather())
-    w.generate_message()
-    time.sleep(30)
-    Display.get().shutdown()
-    # print(f"{Display.get().epd.width=}")
-    # print(f"{Display.get().epd.height=}")
-
     try:
-        pass
+        w = Weather()
+        w.generate_message()
+        Display.get().shutdown()
 
-        #with DisplayContext() as d:
-        #    Himage = Image.new('1', (d.epd.width, d.epd.height), 255)  # 255: clear the frame
-        #    draw = ImageDraw.Draw(Himage)
-        #    draw.text((10, 0), 'hello Nitzu', font = font24, fill = 0)
-        #    draw.text((10, 20), 'feels like: Nitzu', font = font24, fill = 0)
-        #    d.epd.display(d.epd.getbuffer(Himage))
-
-        #time.sleep(5)
-
-        #with DisplayContext as d:
-        #    pass
     except IOError as e:
         logging.info(e)
         reset()

@@ -24,6 +24,9 @@ h1 = 128
 h2 = 0
 
 
+[feed]
+items = 7
+
 
 [nws]
 station = "ILN"
