@@ -22,3 +22,8 @@ sudo python setup.py install
 # run once an hour
 0 * * * * python theres-some-weather-outside/weather.py > theres-some-weather-outside/weather.log
 ```
+
+
+## Running
+Running `python weather.py` will display the weather on your device.
+If you just want to prototype but don't have a device handy, you can use `python weather.py --simulate`, which will dump the image onto `preview.png`
