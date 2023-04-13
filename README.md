@@ -1,4 +1,6 @@
 # Stupid Little E-Ink Weather Display 
+Displays the weather on an e-ink panel. 
+I don't even like this thing. I built it because a _certain_ major provider of mobile phones killed all weather services on its' operating system, then had major outages in their weather app, and I *really* needed to know if there's some fucking weather outside.
 
 ## Stuff Needed
 1. A Raspberry Pi. This tutorial was written with a Pi Zero 2 W
