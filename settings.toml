@@ -1,0 +1,33 @@
+[app]
+useragent = 'Stupid weather app'
+useremail = 'email@lol.email'
+
+[text.h1]
+source_file = 'Anton-Regular.ttf'
+size = 90
+
+[text.h2]
+source_file = 'Font.ttc'
+size = 24
+
+[text.h3]
+source_file = 'Font.ttc'
+size = 18
+
+[text.h4]
+source_file = 'Font.ttc'
+size = 14
+
+[color]
+bg = 255
+h1 = 128
+h2 = 0
+
+
+
+[nws]
+station = "ILN"
+
+[nws.grid]
+x = 35
+y = 36

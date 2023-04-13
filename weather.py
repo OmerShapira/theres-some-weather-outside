@@ -7,6 +7,7 @@ import logging
 import time
 import traceback
 import math
+import toml
 
 import requests
 import dateutil.parser
@@ -29,32 +30,37 @@ logging.basicConfig(level=logging.DEBUG)
 
 # ------------------------------------------------------------------------------ 
 
-cwd = os.getcwd()
-res_dir = os.path.join(cwd, 'resources')
-font_h1 = ImageFont.truetype(os.path.join(res_dir, 'Anton-Regular.ttf'), 90)
-font_h2 = ImageFont.truetype(os.path.join(res_dir, 'Font.ttc'), 24)
-font_h3 = ImageFont.truetype(os.path.join(res_dir, 'Font.ttc'), 18)
-font_h4 = ImageFont.truetype(os.path.join(res_dir, 'Font.ttc'), 14)
+settings:dict = toml.load('settings.toml')
+station = settings['nws']['station']
+grid_x = settings['nws']['grid']['x']
+grid_y = settings['nws']['grid']['y']
+
+WEATHER_API:str = f"https://api.weather.gov/gridpoints/{station}/{grid_x},{grid_y}/forecast/hourly"
+
+fonts = {}
+for key, value in settings['text'].items():
+    path = os.path.join(os.getcwd(), 'resources', value['source_file'])
+    logging.debug(f"loading font at { path= }")
+    fonts[key] = ImageFont.truetype(path, value['size'])
+
 
 ITEMS = 7
 MAX_INTERVAL = 3
 MARGIN = 30
-COLOR_BG = 255
-COLOR_H2 = 0
-COLOR_H1 = 128
+
+colors = settings['color']
 
 ICON_PAD_RATIO = 0.85
 
 # ------------------------------------------------------------------------------ 
 
 class Weather:
-    WEATHER_API:str = "https://api.weather.gov/gridpoints/ILN/35,36/forecast/hourly"
     headers = {
         'User-Agent': 'Weather Panel By Omershapira'
         }
 
     def get_current_weather(self) -> Dict:
-        r = requests.get(self.WEATHER_API, headers=self.headers)
+        r = requests.get(WEATHER_API, headers=self.headers)
         if not r.status_code == 200:
             logging.error(f"Weather API returned status {r.status_code}:{r.content}")
             return {}
@@ -66,7 +72,7 @@ class Weather:
         periods = self.get_current_weather()
         # 'number', 'name', 'startTime', 'endTime', 'isDaytime', 'temperature', 'temperatureUnit', 'temperatureTrend', 'probabilityOfPrecipitation', 'dewpoint', 'relativeHumidity', 'windSpeed', 'windDirection', 'icon', 'shortForecast', 'detailedForecast'
         w,h = disp.epd.width, disp.epd.height
-        img = Image.new('L', (w, h), COLOR_BG)
+        img = Image.new('L', (w, h), colors['bg'])
         draw = ImageDraw.Draw(img)
 
 
@@ -106,7 +112,7 @@ class Weather:
         y = Y_HEADER
         t = dateutil.parser.parse(now['startTime'])
         temptext = f"{t.hour:02}:00 : {ftoc(now['temperature'])} c"
-        draw.text((x,y), temptext, font=font_h1, fill=COLOR_H1, anchor='mm')
+        draw.text((x,y), temptext, font=fonts['h1'], fill=colors['h1'], anchor='mm')
 
         mintemp = min([ftoc(x['temperature']) for x in periods])
         maxtemp = max([ftoc(x['temperature']) for x in periods])
@@ -129,9 +135,9 @@ class Weather:
             Y_TEMP_POINT = lerp(Y_GRAPH_TOP, Y_GRAPH_BOTTOM, 1-temp_norm)
             graph_points.append((X_TEMP_POINT,  Y_TEMP_POINT))
 
-        draw.line(graph_points, fill=COLOR_H1, width=5)
+        draw.line(graph_points, fill=colors['h1'], width=5)
         midpoint = lerp(Y_GRAPH_TOP, Y_GRAPH_BOTTOM, 0.5)
-        draw.line([(graph_points[0][0], midpoint), (graph_points[-1][0],midpoint)], fill=COLOR_H2, width=1)
+        draw.line([(graph_points[0][0], midpoint), (graph_points[-1][0],midpoint)], fill=colors['h2'], width=1)
 
         for i, sample_idx in enumerate(samples):
 
@@ -141,18 +147,18 @@ class Weather:
             timetext = f"{t.hour:02}:00"
             x = int(MARGIN + i * COL_DIM)
             y = Y_TIME
-            draw.text((x,y), timetext, font=font_h3, fill=COLOR_H2)
+            draw.text((x,y), timetext, font=fonts['h3'], fill=colors['h2'])
 
             temp = ftoc(period['temperature'])
             temptext = f"{temp} c"
             x = int(MARGIN + i * COL_DIM)
             y = Y_TEMP
-            draw.text((x,y), temptext, font=font_h2, fill=COLOR_H2)
+            draw.text((x,y), temptext, font=fonts['h2'], fill=colors['h2'])
 
             windtext = f"{period['windSpeed']}"
             x = int(MARGIN + i * COL_DIM)
             y = Y_WIND
-            draw.text((x,y), windtext, font=font_h4, fill=COLOR_H2)
+            draw.text((x,y), windtext, font=fonts['h4'], fill=colors['h2'])
 
             x = int(MARGIN + i * COL_DIM) 
             y = Y_ICON
@@ -165,8 +171,8 @@ class Weather:
             temp_norm = (temp - mintemp) / (maxtemp - mintemp)
             ygraph = lerp(Y_GRAPH_TOP, Y_GRAPH_BOTTOM, 1-temp_norm)
 
-            draw.line((x1, y, x2, y), fill=COLOR_H1, width=1)
-            draw.line((xmid, y + 10, xmid, ygraph-10), fill=COLOR_H1, width=1)
+            draw.line((x1, y, x2, y), fill=colors['h1'], width=1)
+            draw.line((xmid, y + 10, xmid, ygraph-10), fill=colors['h1'], width=1)
 
 
 
