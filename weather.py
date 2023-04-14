@@ -194,7 +194,12 @@ class Weather:
         y = Y_HEADER
         t = dateutil.parser.parse(now['startTime'])
         temptext = f"{t.hour:02}:00 : {ftoc(now['temperature'])}°c"
-        render['gray'].add(ctx.text, (x,y), temptext, font=fonts['h1'], fill=colors['h1'], anchor='mm')
+        render['gray'].add(ctx.text,
+                           (x,y),
+                           temptext,
+                           font=fonts['h1'], 
+                           fill=colors['h1'], 
+                           anchor='mm')
 
         interval = min(MAX_INTERVAL, len(periods) * 1.0 / ITEMS)
         samples = [math.floor(i * interval) for i in range(ITEMS)]
@@ -216,9 +221,15 @@ class Weather:
             y_temp_point = lerp(Y_GRAPH_TOP, Y_GRAPH_BOTTOM, 1-temp_norm)
             graph_points.append((x_temp_point,  y_temp_point))
 
-        render['gray'].add(ctx.line, graph_points, fill=colors['h1'], width=5)
         midpoint = lerp(Y_GRAPH_TOP, Y_GRAPH_BOTTOM, 0.5)
-        render['mono'].add(ctx.line, [(graph_points[0][0], midpoint), (graph_points[-1][0],midpoint)], fill=colors['h2'], width=1)
+        render['gray'].add(ctx.line, 
+                           graph_points, 
+                           fill=colors['h1'], 
+                           width=5)
+        render['mono'].add(ctx.line, 
+                           [(graph_points[0][0], midpoint), (graph_points[-1][0],midpoint)], 
+                           fill=colors['h2'], 
+                           width=1)
 
         # Add Sampled Hours
         for i, sample_idx in enumerate(samples):
@@ -230,14 +241,22 @@ class Weather:
             timetext = f"{t.hour:02}:00"
             x = int(MARGIN + i * COL_DIM)
             y = Y_TIME
-            render['mono'].add(ctx.text, (x,y), timetext, font=fonts['h3'], fill=colors['h2'])
+            render['mono'].add(ctx.text, 
+                               (x,y), 
+                               timetext, 
+                               font=fonts['h3'], 
+                               fill=colors['h2'])
 
             # Render Temperature
             temp = ftoc(period['temperature'])
             temptext = f"{temp}°c"
             x = int(MARGIN + i * COL_DIM)
             y = Y_TEMP
-            render['mono'].add(ctx.text, (x,y), temptext, font=fonts['h2'], fill=colors['h2'])
+            render['mono'].add(ctx.text,
+                               (x,y), 
+                               temptext, 
+                               font=fonts['h2'], 
+                               fill=colors['h2'])
 
             # Render Wind and Rain
             wind_speed = period['windSpeed']
@@ -250,17 +269,33 @@ class Weather:
             y = Y_WIND
             dim = 20
             wind_small = graphics['wind'].resize((dim,dim))
-            render['gray'].add(ctx.paste, wind_small, (x,y), wind_small)
-            render['mono'].add(ctx.text, (x + tab,y), windtext, font=fonts['h4'], fill=colors['h2'])
+            render['gray'].add(ctx.paste, 
+                               wind_small, 
+                               (x,y),
+                               wind_small)
+            render['mono'].add(ctx.text, 
+                               (x + tab,y), 
+                               windtext, 
+                               font=fonts['h4'], 
+                               fill=colors['h2'])
             if pp > 0:
                 rain_small = graphics['rain'].resize((dim,dim))
-                render['gray'].add(ctx.paste, rain_small, (int(x + tab * 3),y), rain_small)
-                render['mono'].add(ctx.text, (x + tab * 4,y), raintext, font=fonts['h4'], fill=colors['h2'])
+                render['gray'].add(ctx.paste, 
+                                   rain_small,
+                                   (int(x + tab * 3),y),
+                                   rain_small)
+                render['mono'].add(ctx.text,
+                                   (x + tab * 4,y),
+                                   raintext,
+                                   font=fonts['h4'],
+                                   fill=colors['h2'])
 
             # Render Icon
             x = int(MARGIN + i * COL_DIM) 
             y = Y_ICON
-            render['gray'].add(ctx.paste, icons[period['icon']],(x,y))
+            render['gray'].add(ctx.paste,
+                               icons[period['icon']],
+                               (x,y))
 
             # Render Graph Lines
             y = Y_WIND + 24
@@ -270,8 +305,14 @@ class Weather:
             temp_norm = (temp - mintemp) / (maxtemp - mintemp)
             ygraph = lerp(Y_GRAPH_TOP, Y_GRAPH_BOTTOM, 1-temp_norm)
 
-            render['gray'].add(ctx.line, (x1, y, x2, y), fill=colors['h1'], width=1)
-            render['gray'].add(ctx.line, (xmid, y + 10, xmid, ygraph-10), fill=colors['h1'], width=1)
+            render['gray'].add(ctx.line,
+                               (x1, y, x2, y),
+                               fill=colors['h1'],
+                               width=1)
+            render['gray'].add(ctx.line,
+                               (xmid, y + 10, xmid, ygraph-10),
+                               fill=colors['h1'],
+                               width=1)
 
 
 
