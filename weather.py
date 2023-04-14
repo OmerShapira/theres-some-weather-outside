@@ -94,15 +94,15 @@ W,H = Display.w, Display.h
 ICON_PAD_RATIO = 0.85
 MARGIN_H = 30
 MARGIN_V = 22
-COL_DIM = (W - MARGIN_H * 2) // ITEMS
-ICON_DIM = int(COL_DIM * ICON_PAD_RATIO)
+DIM_COL = (W - MARGIN_H * 2) // ITEMS
+DIM_ICON = int(DIM_COL * ICON_PAD_RATIO)
 Y_HEADER = MARGIN_V + 40
 Y_BASELINE = 130
 Y_ICON = Y_BASELINE
-Y_LINE1 = Y_ICON + COL_DIM
+Y_LINE1 = Y_ICON + (DIM_COL + DIM_ICON) / 2
 Y_LINE2 = Y_LINE1 + 24
 Y_LINE3 = Y_LINE2 + 30
-TAB = COL_DIM / 6
+TAB = DIM_COL / 6
 
 Y_GRAPH_TOP = Y_LINE3 + 60
 Y_GRAPH_BOTTOM = H - MARGIN_V
@@ -176,7 +176,7 @@ class Weather:
            r = requests.get(url_small)
            b = BytesIO(r.content)
            img = Image.open(b)
-           scaled = img.resize((ICON_DIM, ICON_DIM))
+           scaled = img.resize((DIM_ICON, DIM_ICON))
            return scaled
 
         def ftoc(f) -> int:
@@ -211,8 +211,8 @@ class Weather:
 
         # construct fine graph
 
-        x_begin = MARGIN_H + (0 + 0.5) * COL_DIM
-        x_end = MARGIN_H + (ITEMS - 1 + 0.5) * COL_DIM
+        x_begin = MARGIN_H + (0 + 0.5) * DIM_COL
+        x_end = MARGIN_H + (ITEMS - 1 + 0.5) * DIM_COL
         graph_sample_count = min(samples[-1] + 1, len(periods)) # need to get the last sample in
 
         graph_points = []
@@ -241,7 +241,7 @@ class Weather:
             # Render Time
             t = dateutil.parser.parse(period['startTime'])
             timetext = f"{t.hour:02}:00"
-            x = int(MARGIN_H + i * COL_DIM)
+            x = int(MARGIN_H + i * DIM_COL)
             y = Y_LINE1
             render['mono'].add(ctx.text, 
                                (x,y), 
@@ -253,7 +253,7 @@ class Weather:
             # Render Temperature
             temp = ftoc(period['temperature'])
             temptext = f"{temp}°c"
-            x = int(MARGIN_H + i * COL_DIM)
+            x = int(MARGIN_H + i * DIM_COL)
             y = Y_LINE2
             render['mono'].add(ctx.text,
                                (x,y), 
@@ -268,7 +268,7 @@ class Weather:
             windtext = f"{wind_speed}"
             raintext = f"{pp}%"
 
-            x = int(MARGIN_H + i * COL_DIM)
+            x = int(MARGIN_H + i * DIM_COL)
             y = Y_LINE3
             dim = 20
             wind_small = graphics['wind'].resize((dim,dim))
@@ -294,7 +294,7 @@ class Weather:
                                    fill=colors['h2'])
 
             # Render Icon
-            x = int(MARGIN_H + i * COL_DIM) 
+            x = int(MARGIN_H + i * DIM_COL) 
             y = Y_ICON
             render['gray'].add(ctx.paste,
                                icons[period['icon']],
@@ -302,8 +302,8 @@ class Weather:
 
             # Render Graph Lines
             y = Y_LINE3 + 24
-            x1 = MARGIN_H + (i + 0.5) * COL_DIM - ICON_DIM * 0.5
-            x2 = MARGIN_H + (i + 0.5) * COL_DIM + ICON_DIM * 0.5
+            x1 = MARGIN_H + (i + 0.5) * DIM_COL - DIM_ICON * 0.5
+            x2 = MARGIN_H + (i + 0.5) * DIM_COL + DIM_ICON * 0.5
             xmid = (x1 + x2) * 0.5
             temp_norm = (temp - mintemp) / (maxtemp - mintemp)
             ygraph = lerp(Y_GRAPH_TOP, Y_GRAPH_BOTTOM, 1-temp_norm)
