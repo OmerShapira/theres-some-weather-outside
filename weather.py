@@ -102,7 +102,7 @@ Y_TIME = Y_ICON + 100
 Y_TEMP = Y_TIME + 24
 Y_WIND = Y_TEMP + 30
 
-Y_GRAPH_TOP = Y_WIND + 45
+Y_GRAPH_TOP = Y_WIND + 60
 Y_GRAPH_BOTTOM = h - MARGIN
 
 # ------------------------------------------------------------------------------ 
@@ -120,7 +120,7 @@ class RenderList:
     def __init__(self) -> None:
         self.queue = []
 
-    def add_op(self, op, *args, **kwargs):
+    def add(self, op, *args, **kwargs):
         self.queue.append(RenderItem(op, *args, **kwargs))
     
     def exec(self):
@@ -129,7 +129,6 @@ class RenderList:
 
 
 class RenderContext:
-    # rstage:str = 'gray'
     render_buffer: Optional[Image.Image]
     draw_buffer: Optional[ImageDraw.Draw]
 
@@ -142,7 +141,7 @@ class RenderContext:
     def paste(self, *args, **kwargs):
         self.render_buffer.paste(*args, **kwargs)
 
-render_graph = dict(
+render = dict(
     gray=RenderList(),
     mono=RenderList()
 )
@@ -164,14 +163,14 @@ class Weather:
 
     def generate_message(self) -> Image:
 
-        global ctx, render_graph
+        global ctx, render
 
         periods = self.get_current_weather()
         # 'number', 'name', 'startTime', 'endTime', 'isDaytime', 'temperature', 'temperatureUnit', 'temperatureTrend', 'probabilityOfPrecipitation', 'dewpoint', 'relativeHumidity', 'windSpeed', 'windDirection', 'icon', 'shortForecast', 'detailedForecast'
 
 
         def get_image_scaled(url):
-           url_small = f"{url.split(',')[0]}?size=small"
+           url_small = f"{url.split(',')[0]}?size=large"
            r = requests.get(url_small)
            b = BytesIO(r.content)
            img = Image.open(b)
@@ -195,13 +194,13 @@ class Weather:
         y = Y_HEADER
         t = dateutil.parser.parse(now['startTime'])
         temptext = f"{t.hour:02}:00 : {ftoc(now['temperature'])}°c"
-        render_graph['gray'].add_op(ctx.text, (x,y), temptext, font=fonts['h1'], fill=colors['h1'], anchor='mm')
-
-        mintemp = min([ftoc(x['temperature']) for x in periods])
-        maxtemp = max([ftoc(x['temperature']) for x in periods])
+        render['gray'].add(ctx.text, (x,y), temptext, font=fonts['h1'], fill=colors['h1'], anchor='mm')
 
         interval = min(MAX_INTERVAL, len(periods) * 1.0 / ITEMS)
         samples = [math.floor(i * interval) for i in range(ITEMS)]
+        last_sample = samples[-1] + 1
+        mintemp = min([ftoc(x['temperature']) for x in periods[:last_sample]])
+        maxtemp = max([ftoc(x['temperature']) for x in periods[:last_sample]])
 
         # construct fine graph
 
@@ -217,9 +216,9 @@ class Weather:
             y_temp_point = lerp(Y_GRAPH_TOP, Y_GRAPH_BOTTOM, 1-temp_norm)
             graph_points.append((x_temp_point,  y_temp_point))
 
-        render_graph['gray'].add_op(ctx.line, graph_points, fill=colors['h1'], width=5)
+        render['gray'].add(ctx.line, graph_points, fill=colors['h1'], width=5)
         midpoint = lerp(Y_GRAPH_TOP, Y_GRAPH_BOTTOM, 0.5)
-        render_graph['mono'].add_op(ctx.line, [(graph_points[0][0], midpoint), (graph_points[-1][0],midpoint)], fill=colors['h2'], width=1)
+        render['mono'].add(ctx.line, [(graph_points[0][0], midpoint), (graph_points[-1][0],midpoint)], fill=colors['h2'], width=1)
 
         # Add Sampled Hours
         for i, sample_idx in enumerate(samples):
@@ -231,14 +230,14 @@ class Weather:
             timetext = f"{t.hour:02}:00"
             x = int(MARGIN + i * COL_DIM)
             y = Y_TIME
-            render_graph['mono'].add_op(ctx.text, (x,y), timetext, font=fonts['h3'], fill=colors['h2'])
+            render['mono'].add(ctx.text, (x,y), timetext, font=fonts['h3'], fill=colors['h2'])
 
             # Render Temperature
             temp = ftoc(period['temperature'])
             temptext = f"{temp}°c"
             x = int(MARGIN + i * COL_DIM)
             y = Y_TEMP
-            render_graph['mono'].add_op(ctx.text, (x,y), temptext, font=fonts['h2'], fill=colors['h2'])
+            render['mono'].add(ctx.text, (x,y), temptext, font=fonts['h2'], fill=colors['h2'])
 
             # Render Wind and Rain
             wind_speed = period['windSpeed']
@@ -251,17 +250,17 @@ class Weather:
             y = Y_WIND
             dim = 20
             wind_small = graphics['wind'].resize((dim,dim))
-            render_graph['gray'].add_op(ctx.paste, wind_small, (x,y), wind_small)
-            render_graph['mono'].add_op(ctx.text, (x + tab,y), windtext, font=fonts['h4'], fill=colors['h2'])
+            render['gray'].add(ctx.paste, wind_small, (x,y), wind_small)
+            render['mono'].add(ctx.text, (x + tab,y), windtext, font=fonts['h4'], fill=colors['h2'])
             if pp > 0:
                 rain_small = graphics['rain'].resize((dim,dim))
-                render_graph['gray'].add_op(ctx.paste, rain_small, (int(x + tab * 3),y), rain_small)
-                render_graph['mono'].add_op(ctx.text, (x + tab * 4,y), raintext, font=fonts['h4'], fill=colors['h2'])
+                render['gray'].add(ctx.paste, rain_small, (int(x + tab * 3),y), rain_small)
+                render['mono'].add(ctx.text, (x + tab * 4,y), raintext, font=fonts['h4'], fill=colors['h2'])
 
             # Render Icon
             x = int(MARGIN + i * COL_DIM) 
             y = Y_ICON
-            render_graph['gray'].add_op(ctx.paste, icons[period['icon']],(x,y))
+            render['gray'].add(ctx.paste, icons[period['icon']],(x,y))
 
             # Render Graph Lines
             y = Y_WIND + 24
@@ -271,8 +270,8 @@ class Weather:
             temp_norm = (temp - mintemp) / (maxtemp - mintemp)
             ygraph = lerp(Y_GRAPH_TOP, Y_GRAPH_BOTTOM, 1-temp_norm)
 
-            render_graph['gray'].add_op(ctx.line, (x1, y, x2, y), fill=colors['h1'], width=1)
-            render_graph['gray'].add_op(ctx.line, (xmid, y + 10, xmid, ygraph-10), fill=colors['h1'], width=1)
+            render['gray'].add(ctx.line, (x1, y, x2, y), fill=colors['h1'], width=1)
+            render['gray'].add(ctx.line, (xmid, y + 10, xmid, ygraph-10), fill=colors['h1'], width=1)
 
 
 
@@ -291,11 +290,11 @@ def main():
     
     ctx.render_buffer = Image.new('L', (w, h), colors['bg'])
     ctx.draw_buffer = ImageDraw.Draw(ctx.render_buffer)
-    render_graph['gray'].exec()
+    render['gray'].exec()
 
     ctx.render_buffer = ctx.render_buffer.convert(mode='1')
     ctx.draw_buffer = ImageDraw.Draw(ctx.render_buffer)
-    render_graph['mono'].exec()
+    render['mono'].exec()
 
     if args.simulate:
         ctx.render_buffer.save('preview.png', 'png')
