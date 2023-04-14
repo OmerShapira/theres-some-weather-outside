@@ -103,7 +103,7 @@ Y_ICON = Y_BASELINE
 Y_LINE1 = int(Y_ICON + DIM_COL - DIM_COL_PAD)
 Y_LINE2 = Y_LINE1 + 20
 Y_LINE3 = Y_LINE2 + 30
-TAB = DIM_COL / 6
+TAB = DIM_COL / 10
 
 Y_GRAPH_TOP = Y_LINE3 + 60
 Y_GRAPH_BOTTOM = H - MARGIN_V
@@ -264,7 +264,7 @@ class Weather:
                                anchor='lt')
 
             # Render Wind and Rain
-            wind_speed = period['windSpeed']
+            wind_speed = period['windSpeed'].replace(' ', '')
             pp = period['probabilityOfPrecipitation']['value']
             windtext = f"{wind_speed}"
             raintext = f"{pp}%"
@@ -278,18 +278,23 @@ class Weather:
                                (x,y),
                                wind_small)
             render['mono'].add(ctx.text, 
-                               (x + TAB,y), 
+                               (x + 2 * TAB ,y), 
                                windtext, 
                                font=fonts['h4'], 
                                fill=colors['h2'])
             if pp > 0:
                 rain_small = graphics['rain'].resize((dim,dim))
-                render['gray'].add(ctx.paste, 
-                                   rain_small,
-                                   (int(x + TAB * 3),y),
-                                   rain_small)
+                # render['gray'].add(ctx.paste, 
+                #                    rain_small,
+                #                    (int(x + TAB * 3),y),
+                #                    rain_small)
                 render['mono'].add(ctx.text,
-                                   (x + TAB * 4,y),
+                                   (x + TAB *5,y),
+                                   '☔',
+                                   font=fonts['h4_symbols'],
+                                   fill=colors['h2'])
+                render['mono'].add(ctx.text,
+                                   (x + TAB * 7,y),
                                    raintext,
                                    font=fonts['h4'],
                                    fill=colors['h2'])

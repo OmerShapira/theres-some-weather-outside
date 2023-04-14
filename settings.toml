@@ -22,6 +22,11 @@ source_file = 'Grotesk.ttf'
 web_source = 'https://github.com/google/fonts/blob/main/ofl/schibstedgrotesk/SchibstedGrotesk%5Bwght%5D.ttf?raw=true'
 size = 14
 
+[text.h4_symbols]
+source_file = 'NotoSymbols2.ttf'
+web_source = 'https://github.com/notofonts/noto-fonts/blob/main/unhinted/ttf/NotoSansSymbols2/NotoSansSymbols2-Regular.ttf?raw=true'
+size = 14
+
 [graphics.rain]
 source_file = 'rain.png'
 web_source = 'https://raw.githubusercontent.com/googlefonts/noto-emoji/main/png/72/emoji_u1f327.png'
