@@ -10,12 +10,7 @@ size = 90
 [text.h2]
 source_file = 'Grotesk.ttf'
 web_source = 'https://github.com/google/fonts/blob/main/ofl/schibstedgrotesk/SchibstedGrotesk%5Bwght%5D.ttf?raw=true'
-size = 24
-
-[text.h2_symbol]
-source_file = 'NotoEmoji.ttf'
-web_source = 'http://mirrors.ctan.org/fonts/noto-emoji/NotoEmoji-Regular.ttf'
-size = 24
+size = 30
 
 [text.h3]
 source_file = 'Grotesk.ttf'
@@ -25,11 +20,6 @@ size = 18
 [text.h4]
 source_file = 'Grotesk.ttf'
 web_source = 'https://github.com/google/fonts/blob/main/ofl/schibstedgrotesk/SchibstedGrotesk%5Bwght%5D.ttf?raw=true'
-size = 14
-
-[text.h4_symbol]
-source_file = 'NotoEmoji.ttf'
-web_source = 'http://mirrors.ctan.org/fonts/noto-emoji/NotoEmoji-Regular.ttf'
 size = 14
 
 [graphics.rain]
