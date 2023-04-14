@@ -1,6 +1,6 @@
 #!/usr/bin/python
 # -*- coding:utf-8 -*-
-from typing import Dict
+from typing import Dict, Optional
 import os
 import logging
 import traceback
@@ -26,31 +26,6 @@ from PIL import Image, ImageDraw, ImageFont
 
 logging.basicConfig(level=logging.DEBUG)
 
-# ------------------------------------------------------------------------------ 
-
-class RenderItem:
-    def __init__(self, op, *args, **kwargs) -> None:
-        self.op = op
-        self.args = args
-        self.kwargs = kwargs
-    
-    def exec(self):
-        self.op(*args, **kwargs)
-
-class RenderList:
-    queue = []
-
-    def add_op(self, op, *args, **kwargs):
-        self.queue.append(RenderItem(op, *args, *kwargs))
-    
-    def exec(self):
-        for item in self.queue:
-            item.exec()
-
-render_graph = dict(
-    gray=RenderList(),
-    mono=RenderList()
-)
 
 # ------------------------------------------------------------------------------ 
 
@@ -118,19 +93,63 @@ colors = settings['color']
 w,h = Display.w, Display.h
 ICON_PAD_RATIO = 0.85
 MARGIN = 30
-ICON_DIM = int(((w - MARGIN * 2) // ITEMS) * ICON_PAD_RATIO)
+COL_DIM = (w - MARGIN * 2) // ITEMS
+ICON_DIM = int(COL_DIM * ICON_PAD_RATIO)
 Y_HEADER = 65
 Y_BASELINE = 130
 Y_ICON = Y_BASELINE
 Y_TIME = Y_ICON + 100
 Y_TEMP = Y_TIME + 24
-Y_WIND = Y_TEMP + 24
+Y_WIND = Y_TEMP + 30
 
 Y_GRAPH_TOP = Y_WIND + 45
-Y_GRAPH_BOTTOM = Y_GRAPH_TOP + 150
+Y_GRAPH_BOTTOM = h - MARGIN
 
 # ------------------------------------------------------------------------------ 
 
+class RenderItem:
+    def __init__(self, op, *args, **kwargs) -> None:
+        self.op = op
+        self.args = args
+        self.kwargs = kwargs
+    
+    def exec(self):
+        self.op(*self.args, **self.kwargs)
+
+class RenderList:
+    def __init__(self) -> None:
+        self.queue = []
+
+    def add_op(self, op, *args, **kwargs):
+        self.queue.append(RenderItem(op, *args, **kwargs))
+    
+    def exec(self):
+        for item in self.queue:
+            item.exec()
+
+
+class RenderContext:
+    # rstage:str = 'gray'
+    render_buffer: Optional[Image.Image]
+    draw_buffer: Optional[ImageDraw.Draw]
+
+    def line(self, *args, **kwargs):
+        self.draw_buffer.line(*args, **kwargs)
+    
+    def text(self, *args, **kwargs):
+        self.draw_buffer.text(*args, **kwargs)
+    
+    def paste(self, *args, **kwargs):
+        self.render_buffer.paste(*args, **kwargs)
+
+render_graph = dict(
+    gray=RenderList(),
+    mono=RenderList()
+)
+
+ctx = RenderContext()    
+
+# ------------------------------------------------------------------------------ 
 class Weather:
     headers = {
             'User-Agent': settings['app']['useragent']
@@ -145,11 +164,10 @@ class Weather:
 
     def generate_message(self) -> Image:
 
+        global ctx, render_graph
 
         periods = self.get_current_weather()
         # 'number', 'name', 'startTime', 'endTime', 'isDaytime', 'temperature', 'temperatureUnit', 'temperatureTrend', 'probabilityOfPrecipitation', 'dewpoint', 'relativeHumidity', 'windSpeed', 'windDirection', 'icon', 'shortForecast', 'detailedForecast'
-        img = Image.new('L', (w, h), colors['bg'])
-        draw = ImageDraw.Draw(img)
 
 
         def get_image_scaled(url):
@@ -177,7 +195,7 @@ class Weather:
         y = Y_HEADER
         t = dateutil.parser.parse(now['startTime'])
         temptext = f"{t.hour:02}:00 : {ftoc(now['temperature'])}°c"
-        draw.text((x,y), temptext, font=fonts['h1'], fill=colors['h1'], anchor='mm')
+        render_graph['gray'].add_op(ctx.text, (x,y), temptext, font=fonts['h1'], fill=colors['h1'], anchor='mm')
 
         mintemp = min([ftoc(x['temperature']) for x in periods])
         maxtemp = max([ftoc(x['temperature']) for x in periods])
@@ -187,9 +205,8 @@ class Weather:
 
         # construct fine graph
 
-        col_dim = (w - MARGIN * 2) // ITEMS
-        x_begin = MARGIN + (0 + 0.5) * col_dim
-        x_end = MARGIN + (ITEMS - 1 + 0.5) * col_dim
+        x_begin = MARGIN + (0 + 0.5) * COL_DIM
+        x_end = MARGIN + (ITEMS - 1 + 0.5) * COL_DIM
         graph_sample_count = min(samples[-1] + 1, len(periods)) # need to get the last sample in
 
         graph_points = []
@@ -200,9 +217,9 @@ class Weather:
             y_temp_point = lerp(Y_GRAPH_TOP, Y_GRAPH_BOTTOM, 1-temp_norm)
             graph_points.append((x_temp_point,  y_temp_point))
 
-        draw.line(graph_points, fill=colors['h1'], width=5)
+        render_graph['gray'].add_op(ctx.line, graph_points, fill=colors['h1'], width=5)
         midpoint = lerp(Y_GRAPH_TOP, Y_GRAPH_BOTTOM, 0.5)
-        draw.line([(graph_points[0][0], midpoint), (graph_points[-1][0],midpoint)], fill=colors['h2'], width=1)
+        render_graph['mono'].add_op(ctx.line, [(graph_points[0][0], midpoint), (graph_points[-1][0],midpoint)], fill=colors['h2'], width=1)
 
         # Add Sampled Hours
         for i, sample_idx in enumerate(samples):
@@ -212,16 +229,16 @@ class Weather:
             # Render Time
             t = dateutil.parser.parse(period['startTime'])
             timetext = f"{t.hour:02}:00"
-            x = int(MARGIN + i * col_dim)
+            x = int(MARGIN + i * COL_DIM)
             y = Y_TIME
-            draw.text((x,y), timetext, font=fonts['h3'], fill=colors['h2'])
+            render_graph['mono'].add_op(ctx.text, (x,y), timetext, font=fonts['h3'], fill=colors['h2'])
 
             # Render Temperature
             temp = ftoc(period['temperature'])
             temptext = f"{temp}°c"
-            x = int(MARGIN + i * col_dim)
+            x = int(MARGIN + i * COL_DIM)
             y = Y_TEMP
-            draw.text((x,y), temptext, font=fonts['h2'], fill=colors['h2'])
+            render_graph['mono'].add_op(ctx.text, (x,y), temptext, font=fonts['h2'], fill=colors['h2'])
 
             # Render Wind and Rain
             wind_speed = period['windSpeed']
@@ -229,35 +246,33 @@ class Weather:
             windtext = f"{wind_speed}"
             raintext = f"{pp}%"
 
-            tab = col_dim / 5
-            x = int(MARGIN + i * col_dim)
+            tab = COL_DIM / 5
+            x = int(MARGIN + i * COL_DIM)
             y = Y_WIND
             dim = 20
             wind_small = graphics['wind'].resize((dim,dim))
-            img.paste(wind_small, (x,y), wind_small)
-            draw.text((x + tab,y), windtext, font=fonts['h4'], fill=colors['h2'])
+            render_graph['gray'].add_op(ctx.paste, wind_small, (x,y), wind_small)
+            render_graph['mono'].add_op(ctx.text, (x + tab,y), windtext, font=fonts['h4'], fill=colors['h2'])
             if pp > 0:
                 rain_small = graphics['rain'].resize((dim,dim))
-                img.paste(rain_small, (int(x + tab * 3),y), rain_small)
-                draw.text((x + tab * 4,y), raintext, font=fonts['h4'], fill=colors['h2'])
+                render_graph['gray'].add_op(ctx.paste, rain_small, (int(x + tab * 3),y), rain_small)
+                render_graph['mono'].add_op(ctx.text, (x + tab * 4,y), raintext, font=fonts['h4'], fill=colors['h2'])
 
             # Render Icon
-            x = int(MARGIN + i * col_dim) 
+            x = int(MARGIN + i * COL_DIM) 
             y = Y_ICON
-            img.paste(icons[period['icon']],(x,y)) 
+            render_graph['gray'].add_op(ctx.paste, icons[period['icon']],(x,y))
 
             # Render Graph Lines
             y = Y_WIND + 24
-            x1 = MARGIN + (i + 0.5) * col_dim - ICON_DIM * 0.5
-            x2 = MARGIN + (i + 0.5) * col_dim + ICON_DIM * 0.5
+            x1 = MARGIN + (i + 0.5) * COL_DIM - ICON_DIM * 0.5
+            x2 = MARGIN + (i + 0.5) * COL_DIM + ICON_DIM * 0.5
             xmid = (x1 + x2) * 0.5
             temp_norm = (temp - mintemp) / (maxtemp - mintemp)
             ygraph = lerp(Y_GRAPH_TOP, Y_GRAPH_BOTTOM, 1-temp_norm)
 
-            draw.line((x1, y, x2, y), fill=colors['h1'], width=1)
-            draw.line((xmid, y + 10, xmid, ygraph-10), fill=colors['h1'], width=1)
-
-        return img
+            render_graph['gray'].add_op(ctx.line, (x1, y, x2, y), fill=colors['h1'], width=1)
+            render_graph['gray'].add_op(ctx.line, (xmid, y + 10, xmid, ygraph-10), fill=colors['h1'], width=1)
 
 
 
@@ -271,18 +286,25 @@ def main():
 
     args = parser.parse_args()
 
-    w = Weather()
-    img = w.generate_message()
-    bw = img.convert(mode='1')
+    weather = Weather()
+    weather.generate_message()
+    
+    ctx.render_buffer = Image.new('L', (w, h), colors['bg'])
+    ctx.draw_buffer = ImageDraw.Draw(ctx.render_buffer)
+    render_graph['gray'].exec()
+
+    ctx.render_buffer = ctx.render_buffer.convert(mode='1')
+    ctx.draw_buffer = ImageDraw.Draw(ctx.render_buffer)
+    render_graph['mono'].exec()
 
     if args.simulate:
-        bw.save('preview.png', 'png')
+        ctx.render_buffer.save('preview.png', 'png')
         exit()
 
     disp = Display.get()
     disp.init()
     #disp.clear()
-    buf = disp.epd.getbuffer(bw)
+    buf = disp.epd.getbuffer(ctx.render_buffer)
     # time.sleep(5)
     logging.debug("display device")
     disp.epd.display(buf)
