@@ -332,7 +332,6 @@ def main():
 
     parser = argparse.ArgumentParser("There's some weather outside")
     parser.add_argument('--simulate', action='store_true')
-    parser.add_argument('--rotate', action='store_true')
 
     args = parser.parse_args()
 
@@ -347,8 +346,8 @@ def main():
     ctx.draw_buffer = ImageDraw.Draw(ctx.render_buffer)
     render['mono'].exec()
 
-    if args.rotate:
-        ctx.render_buffer = ctx.render_buffer.rotate(180, resample=Image.Resampling.NEAREST)
+    if settings['display']['rotate']:
+        ctx.render_buffer = ctx.render_buffer.rotate(180)
 
     if args.simulate:
         ctx.render_buffer.save('preview.png', 'png')

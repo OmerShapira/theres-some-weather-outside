@@ -49,3 +49,6 @@ station = "ILN"
 [nws.grid]
 x = 35
 y = 36
+
+[display]
+rotate = true
