@@ -106,13 +106,14 @@ DIM_ICON = int(DIM_COL * ICON_PAD_RATIO)
 DIM_COL_PAD = DIM_COL * (1 - ICON_PAD_RATIO) * 0.5
 Y_HEADER = MARGIN_V + 40
 Y_BASELINE = 130
-Y_ICON = Y_BASELINE
-Y_LINE1 = int(Y_ICON + DIM_COL - DIM_COL_PAD)
+Y_ICON = Y_BASELINE - 20
+Y_LINE1 = int(Y_ICON + DIM_COL - DIM_COL_PAD) - 30
 Y_LINE2 = Y_LINE1 + 20
 Y_LINE3 = Y_LINE2 + 30
+Y_LINE4 = Y_LINE3 + 30
 TAB = DIM_COL / 10
 
-Y_GRAPH_TOP = Y_LINE3 + 60
+Y_GRAPH_TOP = Y_LINE4 + 60
 Y_GRAPH_BOTTOM = H - MARGIN_V
 
 # ------------------------------------------------------------------------------ 
@@ -144,6 +145,9 @@ class RenderContext:
 
     def line(self, *args, **kwargs):
         self.draw_buffer.line(*args, **kwargs)
+
+    def regular_polygon(self, *args, **kwargs):
+        self.draw_buffer.regular_polygon(*args, **kwargs)
     
     def text(self, *args, **kwargs):
         self.draw_buffer.text(*args, **kwargs)
@@ -194,6 +198,10 @@ class WeatherV2:
         daily = forecast['daily']
         hourly = forecast['hourly']
 
+        days = [(dateutil.parser.parse(x), True) for x in daily['sunrise']]
+        nights = [(dateutil.parser.parse(x), False) for x in daily['sunset']]
+        sun = sorted(days + nights, key=lambda x: x[0])
+
         first_sample = 0
         time_now = datetime.datetime.now()
         for i, t in enumerate(hourly['time']):
@@ -210,13 +218,23 @@ class WeatherV2:
         mintemp = min(hourly['temperature_2m'][first_sample:last_sample])
         maxtemp = max(hourly['temperature_2m'][first_sample:last_sample])
 
-        def get_weathercode_url(code:int)->str:
-            day_flag = "d"
+        def is_day(time) -> bool:
+            # Silly search
+            time = dateutil.parser.parse(time)
+            for x in sun :
+                day_flag = not x[1] 
+                if time < x[0]:
+                    break
+            return day_flag
+
+        
+        def get_weathercode_url(code:int, time)->str: 
+            day_flag = 'd' if is_day(time) else 'n'
             meteo = int(code)
             weathercode_url = f"{ meteo2owm.get(meteo,0) }{day_flag}.png"
             return weathercode_url
 
-        weathercode_urls = {i:get_weathercode_url(hourly['weathercode'][i]) for i in samples}
+        weathercode_urls = {i:get_weathercode_url(hourly['weathercode'][i], hourly['time'][i]) for i in samples}
         icons = self.cache_and_scale_icons(set(weathercode_urls.values()))
 
         x = W // 2
@@ -236,11 +254,11 @@ class WeatherV2:
 
         x_begin = MARGIN_H + (0 + 0.5) * DIM_COL
         x_end = MARGIN_H + (ITEMS - 1 + 0.5) * DIM_COL
-        graph_sample_count = min(samples[-1] + 1, len(hourly['time'])) # need to get the last sample in
+        # graph_sample_count = min(samples[-1] + 1, len(hourly['time'])) # need to get the last sample in
+        graph_sample_count = last_sample - first_sample
 
         graph_points = []
-        for i, sample in enumerate(range(first_sample, first_sample + graph_sample_count)):
-            temp = hourly['temperature_2m'][sample]
+        for i, temp in enumerate(hourly['temperature_2m'][first_sample:last_sample]):
             temp_norm = (temp - mintemp) / (maxtemp - mintemp)
             x_temp_point = lerp(x_begin, x_end, i/(graph_sample_count - 1))
             y_temp_point = lerp(Y_GRAPH_TOP, Y_GRAPH_BOTTOM, 1-temp_norm)
@@ -250,7 +268,7 @@ class WeatherV2:
         render['gray'].add(ctx.line, 
                            graph_points, 
                            fill=colors['h1'], 
-                           width=5)
+                           width=3)
         render['mono'].add(ctx.line, 
                            [(graph_points[0][0], midpoint), (graph_points[-1][0],midpoint)], 
                            fill=colors['h2'], 
@@ -275,7 +293,7 @@ class WeatherV2:
             temp = hourly['temperature_2m'][sample]
             feels = hourly['apparent_temperature'][sample]
             temptext = f"{temp:.0f}°"
-            feelstext = f"{feels:.0f}°"
+            feelstext = f"({feels:.0f}°)"
             x = int(MARGIN_H + i * DIM_COL)
             y = Y_LINE2
             render['mono'].add(ctx.text,
@@ -285,7 +303,8 @@ class WeatherV2:
                                fill=colors['h2'],
                                anchor='lt')
 
-            x = int(MARGIN_H + (i + 0.5) * DIM_COL)
+            y = Y_LINE3
+            # x = int(MARGIN_H + (i + 0.5) * DIM_COL)
             render['mono'].add(ctx.text,
                                (x,y), 
                                feelstext, 
@@ -300,7 +319,7 @@ class WeatherV2:
             raintext = f"{pp:.0f}%"
 
             x = int(MARGIN_H + i * DIM_COL)
-            y = Y_LINE3
+            y = Y_LINE4
             dim = 20
             wind_small = graphics['wind'].resize((dim,dim))
             render['gray'].add(ctx.paste, 
@@ -333,7 +352,8 @@ class WeatherV2:
             x = int(MARGIN_H + i * DIM_COL) 
             y = Y_ICON
             code = hourly['weathercode'][sample]
-            icon = icons[get_weathercode_url(code)]
+            time = hourly['time'][sample]
+            icon = icons[get_weathercode_url(code, time)]
             render['gray'].add(ctx.paste,
                                icon,
                                (x,y),
@@ -352,9 +372,14 @@ class WeatherV2:
                                fill=colors['h1'],
                                width=1)
             render['gray'].add(ctx.line,
-                               (xmid, y + 10, xmid, ygraph + 5),
+                               (xmid, y + 10, xmid, ygraph - 8),
                                fill=colors['h1'],
                                width=1)
+            render['mono'].add(ctx.regular_polygon,
+                               (xmid, ygraph, 5),
+                               n_sides=10,
+                               fill=colors['h2'],
+                               outline=colors['h2'])
 
 
 def reset():
