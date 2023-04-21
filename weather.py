@@ -1,8 +1,12 @@
 #!/usr/bin/python
 # -*- coding:utf-8 -*-
+import logging
+logging.basicConfig(level=logging.DEBUG)
+
+# ------------------------------------------------------------------------------ 
+
 from typing import Dict, Optional, Iterable
 import os
-import logging
 import traceback
 import math
 import toml
@@ -16,6 +20,7 @@ from io import BytesIO
 
 from weather_code import meteo2owm
 
+from PIL import Image, ImageDraw, ImageFont
 
 # ------------------------------------------------------------------------------ 
 
@@ -23,12 +28,6 @@ try:
     from waveshare_epd import epd7in5_V2
 except ModuleNotFoundError as e:
     logging.info("Waveshare modules not found. Only dry run is possible")
-
-from PIL import Image, ImageDraw, ImageFont
-
-# ------------------------------------------------------------------------------ 
-
-logging.basicConfig(level=logging.DEBUG)
 
 
 # ------------------------------------------------------------------------------ 
@@ -195,20 +194,21 @@ class WeatherV2:
         daily = forecast['daily']
         hourly = forecast['hourly']
 
-        start_index = 0
+        first_sample = 0
         time_now = datetime.datetime.now()
         for i, t in enumerate(hourly['time']):
             if dateutil.parser.parse(t) > time_now:
-                start_index = max(0, i - 1)
+                first_sample = max(0, i - 1)
+                break
 
         def lerp(a, b, x) -> int:
             return int(a + x * (b-a))
 
         interval = min(MAX_INTERVAL, len(hourly['time']) * 1.0 / ITEMS)
-        samples = [math.floor(i * interval) for i in range(ITEMS)]
+        samples = [i for i in range(first_sample, len(hourly['time']), interval)][:ITEMS]
         last_sample = samples[-1] + 1
-        mintemp = min([x for x in hourly['temperature_2m'][:last_sample]])
-        maxtemp = max([x for x in hourly['temperature_2m'][:last_sample]])
+        mintemp = min(hourly['temperature_2m'][first_sample:last_sample])
+        maxtemp = max(hourly['temperature_2m'][first_sample:last_sample])
 
         def get_weathercode_url(code:int)->str:
             day_flag = "d"
@@ -222,8 +222,8 @@ class WeatherV2:
         x = W // 2
         y = Y_HEADER
 
-        t = dateutil.parser.parse(hourly['time'][start_index])
-        temptext = f"{t.hour:02}:00 : {hourly['temperature_2m'][start_index]:.0f}°c"
+        t = dateutil.parser.parse(hourly['time'][first_sample])
+        temptext = f"{t.hour:02}:00 : {hourly['temperature_2m'][first_sample]:.0f}°c"
         render['gray'].add(ctx.text,
                            (x,y),
                            temptext,
@@ -239,8 +239,8 @@ class WeatherV2:
         graph_sample_count = min(samples[-1] + 1, len(hourly['time'])) # need to get the last sample in
 
         graph_points = []
-        for i in range(graph_sample_count):
-            temp = hourly['temperature_2m'][i]
+        for i, sample in enumerate(range(first_sample, first_sample + graph_sample_count)):
+            temp = hourly['temperature_2m'][sample]
             temp_norm = (temp - mintemp) / (maxtemp - mintemp)
             x_temp_point = lerp(x_begin, x_end, i/(graph_sample_count - 1))
             y_temp_point = lerp(Y_GRAPH_TOP, Y_GRAPH_BOTTOM, 1-temp_norm)
@@ -345,197 +345,16 @@ class WeatherV2:
             x2 = MARGIN_H + (i + 0.5) * DIM_COL + DIM_ICON * 0.5
             xmid = (x1 + x2) * 0.5
             temp_norm = (temp - mintemp) / (maxtemp - mintemp)
-            ygraph = lerp(Y_GRAPH_TOP, Y_GRAPH_BOTTOM, 1-temp_norm)
+            ygraph = int(lerp(Y_GRAPH_TOP, Y_GRAPH_BOTTOM, 1 - temp_norm))
 
             render['gray'].add(ctx.line,
                                (x1, y, x2, y),
                                fill=colors['h1'],
                                width=1)
             render['gray'].add(ctx.line,
-                               (xmid, y + 10, xmid, ygraph-10),
+                               (xmid, y + 10, xmid, ygraph + 5),
                                fill=colors['h1'],
                                width=1)
-
-
-
-class Weather:
-    headers = {
-            'User-Agent': settings['app']['useragent']
-        }
-
-    def get_current_weather(self) -> Dict:
-        r = requests.get(WEATHER_API_NWS, headers=self.headers)
-        if not r.status_code == 200:
-            logging.error(f"Weather API returned status {r.status_code}:{r.content}")
-            return {}
-        return r.json()['properties']['periods']
-    
-    def get_current_weather_2(self) -> Dict:
-        r = requests.get(WEATHER_API_OPENMETEO, headers=self.headers)
-        if not r.status_code == 200:
-            logging.error(f"Weather API returned status {r.status_code}:{r.content}")
-            return {}
-        pass
-
-    def generate_message(self) -> Image:
-
-        global ctx, render
-
-        periods = self.get_current_weather()
-        # 'number', 'name', 'startTime', 'endTime', 'isDaytime', 'temperature', 'temperatureUnit', 'temperatureTrend', 'probabilityOfPrecipitation', 'dewpoint', 'relativeHumidity', 'windSpeed', 'windDirection', 'icon', 'shortForecast', 'detailedForecast'
-
-
-        def get_image_scaled(url):
-           url_small = f"{url.split(',')[0]}?size=large"
-           r = requests.get(url_small)
-           b = BytesIO(r.content)
-           img = Image.open(b)
-           scaled = img.resize((DIM_ICON, DIM_ICON))
-           return scaled
-
-        def ftoc(f) -> int:
-            f = int(f)
-            return int((f-32)*5/9)
-
-        def lerp(a, b, x) -> int:
-            return int(a + x * (b-a))
-
-        #TODO : filter icons
-        icons_to_download = set([p['icon'] for p in periods])
-        icons = { addr:get_image_scaled(addr) for addr in icons_to_download }
-
-
-        now = periods[0]
-        x = W // 2
-        y = Y_HEADER
-        t = dateutil.parser.parse(now['startTime'])
-        temptext = f"{t.hour:02}:00 : {ftoc(now['temperature'])}°c"
-        render['gray'].add(ctx.text,
-                           (x,y),
-                           temptext,
-                           font=fonts['h1'], 
-                           fill=colors['h1'], 
-                           anchor='mm')
-
-        interval = min(MAX_INTERVAL, len(periods) * 1.0 / ITEMS)
-        samples = [math.floor(i * interval) for i in range(ITEMS)]
-        last_sample = samples[-1] + 1
-        mintemp = min([ftoc(x['temperature']) for x in periods[:last_sample]])
-        maxtemp = max([ftoc(x['temperature']) for x in periods[:last_sample]])
-
-        # construct fine graph
-
-        x_begin = MARGIN_H + (0 + 0.5) * DIM_COL
-        x_end = MARGIN_H + (ITEMS - 1 + 0.5) * DIM_COL
-        graph_sample_count = min(samples[-1] + 1, len(periods)) # need to get the last sample in
-
-        graph_points = []
-        for i in range(graph_sample_count):
-            temp = ftoc(periods[i]['temperature'])
-            temp_norm = (temp - mintemp) / (maxtemp - mintemp)
-            x_temp_point = lerp(x_begin, x_end, i/(graph_sample_count - 1))
-            y_temp_point = lerp(Y_GRAPH_TOP, Y_GRAPH_BOTTOM, 1-temp_norm)
-            graph_points.append((x_temp_point,  y_temp_point))
-
-        midpoint = lerp(Y_GRAPH_TOP, Y_GRAPH_BOTTOM, 0.5)
-        render['gray'].add(ctx.line, 
-                           graph_points, 
-                           fill=colors['h1'], 
-                           width=5)
-        render['mono'].add(ctx.line, 
-                           [(graph_points[0][0], midpoint), (graph_points[-1][0],midpoint)], 
-                           fill=colors['h2'], 
-                           width=1)
-
-        # Add Sampled Hours
-        for i, sample_idx in enumerate(samples):
-
-            period = periods[sample_idx]
-
-            # Render Time
-            t = dateutil.parser.parse(period['startTime'])
-            timetext = f"{t.hour:02}:00"
-            x = int(MARGIN_H + i * DIM_COL)
-            y = Y_LINE1
-            render['mono'].add(ctx.text, 
-                               (x,y), 
-                               timetext, 
-                               font=fonts['h3'], 
-                               fill=colors['h2'],
-                               anchor='lt')
-
-            # Render Temperature
-            temp = ftoc(period['temperature'])
-            temptext = f"{temp}°c"
-            x = int(MARGIN_H + i * DIM_COL)
-            y = Y_LINE2
-            render['mono'].add(ctx.text,
-                               (x,y), 
-                               temptext, 
-                               font=fonts['h2'], 
-                               fill=colors['h2'],
-                               anchor='lt')
-
-            # Render Wind and Rain
-            wind_speed = period['windSpeed'].replace(' ', '')
-            pp = period['probabilityOfPrecipitation']['value']
-            windtext = f"{wind_speed}"
-            raintext = f"{pp}%"
-
-            x = int(MARGIN_H + i * DIM_COL)
-            y = Y_LINE3
-            dim = 20
-            wind_small = graphics['wind'].resize((dim,dim))
-            render['gray'].add(ctx.paste, 
-                               wind_small, 
-                               (x,y),
-                               wind_small)
-            render['mono'].add(ctx.text, 
-                               (x + 2 * TAB ,y), 
-                               windtext, 
-                               font=fonts['h4'], 
-                               fill=colors['h2'])
-            if pp > 0:
-                rain_small = graphics['rain'].resize((dim,dim))
-                # render['gray'].add(ctx.paste, 
-                #                    rain_small,
-                #                    (int(x + TAB * 3),y),
-                #                    rain_small)
-                render['mono'].add(ctx.text,
-                                   (x + TAB *5,y),
-                                   '☔',
-                                   font=fonts['h4_symbols'],
-                                   fill=colors['h2'])
-                render['mono'].add(ctx.text,
-                                   (x + TAB * 7,y),
-                                   raintext,
-                                   font=fonts['h4'],
-                                   fill=colors['h2'])
-
-            # Render Icon
-            x = int(MARGIN_H + i * DIM_COL) 
-            y = Y_ICON
-            render['gray'].add(ctx.paste,
-                               icons[period['icon']],
-                               (x,y))
-
-            # Render Graph Lines
-            y = Y_LINE3 + 24
-            x1 = MARGIN_H + (i + 0.5) * DIM_COL - DIM_ICON * 0.5
-            x2 = MARGIN_H + (i + 0.5) * DIM_COL + DIM_ICON * 0.5
-            xmid = (x1 + x2) * 0.5
-            temp_norm = (temp - mintemp) / (maxtemp - mintemp)
-            ygraph = lerp(Y_GRAPH_TOP, Y_GRAPH_BOTTOM, 1-temp_norm)
-
-            render['gray'].add(ctx.line,
-                               (x1, y, x2, y),
-                               fill=colors['h1'],
-                               width=1)
-            render['gray'].add(ctx.line,
-                               (xmid, y + 10, xmid, ygraph-10),
-                               fill=colors['h1'],
-                               width=1)
-
 
 
 def reset():
