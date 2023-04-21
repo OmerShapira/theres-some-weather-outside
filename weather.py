@@ -8,15 +8,12 @@ logging.basicConfig(level=logging.DEBUG)
 from typing import Dict, Optional, Iterable
 import os
 import traceback
-import math
 import toml
 import argparse
 
 import requests
 import dateutil.parser
 import datetime
-from urllib.parse import urlencode, urlparse, urlunparse
-from io import BytesIO
 
 from weather_code import meteo2owm
 
