@@ -1,6 +1,6 @@
 #!/usr/bin/python
 # -*- coding:utf-8 -*-
-from typing import Dict, Optional
+from typing import Dict, Optional, Iterable
 import os
 import logging
 import traceback
@@ -10,8 +10,12 @@ import argparse
 
 import requests
 import dateutil.parser
+import datetime
 from urllib.parse import urlencode, urlparse, urlunparse
 from io import BytesIO
+
+from weather_code import meteo2owm
+
 
 # ------------------------------------------------------------------------------ 
 
@@ -66,11 +70,15 @@ class Display:
 # ------------------------------------------------------------------------------ 
 
 settings:dict = toml.load('settings.toml')
-station = settings['nws']['station']
-grid_x = settings['nws']['grid']['x']
-grid_y = settings['nws']['grid']['y']
 
-WEATHER_API:str = f"https://api.weather.gov/gridpoints/{station}/{grid_x},{grid_y}/forecast/hourly"
+station = settings['api']['nws']['station']
+grid_x = settings['api']['nws']['grid']['x']
+grid_y = settings['api']['nws']['grid']['y']
+WEATHER_API_NWS:str = f"https://api.weather.gov/gridpoints/{station}/{grid_x},{grid_y}/forecast/hourly"
+
+lat =  settings['api']['openmeteo']['grid']['lat']
+long = settings['api']['openmeteo']['grid']['long']
+WEATHER_API_OPENMETEO:str = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={long}&hourly=temperature_2m,apparent_temperature,precipitation_probability,precipitation,weathercode,winddirection_10m,windgusts_10m&daily=weathercode,temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,sunrise,sunset,uv_index_max&forecast_days=3&timezone=America%2FNew_York"
 
 fonts = {}
 for key, value in settings['text'].items():
@@ -152,17 +160,222 @@ render = dict(
 ctx = RenderContext()    
 
 # ------------------------------------------------------------------------------ 
+class WeatherV2:
+    """Uses the openmeteo API
+    """
+    headers = {
+            'User-Agent': settings['app']['useragent']
+        }
+
+    def get_current_weather(self) -> Dict:
+        r = requests.get(WEATHER_API_OPENMETEO, headers=self.headers)
+        if not r.status_code == 200:
+            logging.error(f"Weather API returned status {r.status_code}:{r.content}")
+            return {}
+        return r.json()
+
+    def cache_and_scale_icons(self, icons:Iterable[str]) -> Dict[str, Image.Image]:
+
+        def get_image_scaled(filename):
+           b = os.path.join(os.getcwd(), 'cache', filename)
+           img = Image.open(b)
+           scaled = img.resize((DIM_ICON, DIM_ICON))
+           return scaled
+
+        self.icons =  {url:get_image_scaled(url) for url in icons}
+        
+        return self.icons
+
+
+    def generate_message(self) -> Image:
+
+        global ctx, render
+
+        forecast = self.get_current_weather()
+        daily = forecast['daily']
+        hourly = forecast['hourly']
+
+        start_index = 0
+        time_now = datetime.datetime.now()
+        for i, t in enumerate(hourly['time']):
+            if dateutil.parser.parse(t) > time_now:
+                start_index = max(0, i - 1)
+
+        def lerp(a, b, x) -> int:
+            return int(a + x * (b-a))
+
+        interval = min(MAX_INTERVAL, len(hourly['time']) * 1.0 / ITEMS)
+        samples = [math.floor(i * interval) for i in range(ITEMS)]
+        last_sample = samples[-1] + 1
+        mintemp = min([x for x in hourly['temperature_2m'][:last_sample]])
+        maxtemp = max([x for x in hourly['temperature_2m'][:last_sample]])
+
+        def get_weathercode_url(code:int)->str:
+            day_flag = "d"
+            meteo = int(code)
+            weathercode_url = f"{ meteo2owm.get(meteo,0) }{day_flag}.png"
+            return weathercode_url
+
+        weathercode_urls = {i:get_weathercode_url(hourly['weathercode'][i]) for i in samples}
+        icons = self.cache_and_scale_icons(set(weathercode_urls.values()))
+
+        x = W // 2
+        y = Y_HEADER
+
+        t = dateutil.parser.parse(hourly['time'][start_index])
+        temptext = f"{t.hour:02}:00 : {hourly['temperature_2m'][start_index]:.0f}°c"
+        render['gray'].add(ctx.text,
+                           (x,y),
+                           temptext,
+                           font=fonts['h1'], 
+                           fill=colors['h1'], 
+                           anchor='mm')
+
+
+        # construct fine graph
+
+        x_begin = MARGIN_H + (0 + 0.5) * DIM_COL
+        x_end = MARGIN_H + (ITEMS - 1 + 0.5) * DIM_COL
+        graph_sample_count = min(samples[-1] + 1, len(hourly['time'])) # need to get the last sample in
+
+        graph_points = []
+        for i in range(graph_sample_count):
+            temp = hourly['temperature_2m'][i]
+            temp_norm = (temp - mintemp) / (maxtemp - mintemp)
+            x_temp_point = lerp(x_begin, x_end, i/(graph_sample_count - 1))
+            y_temp_point = lerp(Y_GRAPH_TOP, Y_GRAPH_BOTTOM, 1-temp_norm)
+            graph_points.append((x_temp_point,  y_temp_point))
+
+        midpoint = lerp(Y_GRAPH_TOP, Y_GRAPH_BOTTOM, 0.5)
+        render['gray'].add(ctx.line, 
+                           graph_points, 
+                           fill=colors['h1'], 
+                           width=5)
+        render['mono'].add(ctx.line, 
+                           [(graph_points[0][0], midpoint), (graph_points[-1][0],midpoint)], 
+                           fill=colors['h2'], 
+                           width=1)
+
+        # Add Sampled Hours
+        for i, sample in enumerate(samples):
+
+            # Render Time
+            t = dateutil.parser.parse(hourly['time'][sample])
+            timetext = f"{t.hour:02}:00"
+            x = int(MARGIN_H + i * DIM_COL)
+            y = Y_LINE1
+            render['mono'].add(ctx.text, 
+                               (x,y), 
+                               timetext, 
+                               font=fonts['h3'], 
+                               fill=colors['h2'],
+                               anchor='lt')
+
+            # Render Temperature
+            temp = hourly['temperature_2m'][sample]
+            feels = hourly['apparent_temperature'][sample]
+            temptext = f"{temp:.0f}°"
+            feelstext = f"{feels:.0f}°"
+            x = int(MARGIN_H + i * DIM_COL)
+            y = Y_LINE2
+            render['mono'].add(ctx.text,
+                               (x,y), 
+                               temptext, 
+                               font=fonts['h2'], 
+                               fill=colors['h2'],
+                               anchor='lt')
+
+            x = int(MARGIN_H + (i + 0.5) * DIM_COL)
+            render['mono'].add(ctx.text,
+                               (x,y), 
+                               feelstext, 
+                               font=fonts['h3'], 
+                               fill=colors['h2'],
+                               anchor='lt')
+
+            # Render Wind and Rain
+            wind_speed = hourly['windgusts_10m'][sample]
+            pp = int(hourly['precipitation_probability'][sample])
+            windtext = f"{wind_speed:.0f}km/h"
+            raintext = f"{pp:.0f}%"
+
+            x = int(MARGIN_H + i * DIM_COL)
+            y = Y_LINE3
+            dim = 20
+            wind_small = graphics['wind'].resize((dim,dim))
+            render['gray'].add(ctx.paste, 
+                               wind_small, 
+                               (x,y),
+                               wind_small)
+            render['mono'].add(ctx.text, 
+                               (x + 2 * TAB ,y), 
+                               windtext, 
+                               font=fonts['h4'], 
+                               fill=colors['h2'])
+            if pp > 0:
+                rain_small = graphics['rain'].resize((dim,dim))
+                # render['gray'].add(ctx.paste, 
+                #                    rain_small,
+                #                    (int(x + TAB * 3),y),
+                #                    rain_small)
+                render['mono'].add(ctx.text,
+                                   (x + TAB *5,y),
+                                   '☔',
+                                   font=fonts['h4_symbols'],
+                                   fill=colors['h2'])
+                render['mono'].add(ctx.text,
+                                   (x + TAB * 7,y),
+                                   raintext,
+                                   font=fonts['h4'],
+                                   fill=colors['h2'])
+
+            # Render Icon
+            x = int(MARGIN_H + i * DIM_COL) 
+            y = Y_ICON
+            code = hourly['weathercode'][sample]
+            icon = icons[get_weathercode_url(code)]
+            render['gray'].add(ctx.paste,
+                               icon,
+                               (x,y),
+                               icon)
+
+            # Render Graph Lines
+            y = Y_LINE3 + 24
+            x1 = MARGIN_H + (i + 0.5) * DIM_COL - DIM_ICON * 0.5
+            x2 = MARGIN_H + (i + 0.5) * DIM_COL + DIM_ICON * 0.5
+            xmid = (x1 + x2) * 0.5
+            temp_norm = (temp - mintemp) / (maxtemp - mintemp)
+            ygraph = lerp(Y_GRAPH_TOP, Y_GRAPH_BOTTOM, 1-temp_norm)
+
+            render['gray'].add(ctx.line,
+                               (x1, y, x2, y),
+                               fill=colors['h1'],
+                               width=1)
+            render['gray'].add(ctx.line,
+                               (xmid, y + 10, xmid, ygraph-10),
+                               fill=colors['h1'],
+                               width=1)
+
+
+
 class Weather:
     headers = {
             'User-Agent': settings['app']['useragent']
         }
 
     def get_current_weather(self) -> Dict:
-        r = requests.get(WEATHER_API, headers=self.headers)
+        r = requests.get(WEATHER_API_NWS, headers=self.headers)
         if not r.status_code == 200:
             logging.error(f"Weather API returned status {r.status_code}:{r.content}")
             return {}
         return r.json()['properties']['periods']
+    
+    def get_current_weather_2(self) -> Dict:
+        r = requests.get(WEATHER_API_OPENMETEO, headers=self.headers)
+        if not r.status_code == 200:
+            logging.error(f"Weather API returned status {r.status_code}:{r.content}")
+            return {}
+        pass
 
     def generate_message(self) -> Image:
 
@@ -335,7 +548,7 @@ def main():
 
     args = parser.parse_args()
 
-    weather = Weather()
+    weather = WeatherV2()
     weather.generate_message()
     
     ctx.render_buffer = Image.new('L', (W, H), colors['bg'])

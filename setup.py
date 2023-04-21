@@ -3,6 +3,7 @@ import argparse
 import logging
 import requests
 import toml
+from weather_code import owm
 
 settings = toml.load('settings.toml')
 
@@ -47,8 +48,8 @@ except ModuleNotFoundError as e:
 
 try:
     info("Checking NWS settings")
-    assert settings['nws']
-    nws = settings['nws']
+    assert settings['api']['nws']
+    nws = settings['api']['nws']
     assert nws['station']
     assert nws['grid']
     assert type(nws['grid']['x']) == int
@@ -125,6 +126,31 @@ for k, v in settings['graphics'].items():
     except e:
         error(f"Error while downloading {link} : {repr(e)}")
 
+
+
+# ------------------------------------------------------------------------------ 
+
+# import csv
+# owm_reader = csv.reader(owm)
+lines = owm.splitlines()
+icons = (line.split(',')[-1] for line in lines)
+icons = ([f"{x}", f"{x[:-1]}n"] for x in icons)
+download_list = set()
+for x in icons:
+    for y in x:
+        download_list.add(y)
+for icon in download_list:
+    link = f"https://openweathermap.org/img/wn/{icon}@4x.png"
+    r = requests.get(link, allow_redirects=True)
+    path = os.path.join(cache_dir, f"{icon}.png")
+    try:
+        info(f"Downloading {link}")
+        r = requests.get(link, allow_redirects=True) 
+        with open(path, 'wb') as f:
+            f.write(r.content)
+    except e:
+        error(f"Error while downloading {link} : {repr(e)}")
+
+# ------------------------------------------------------------------------------ 
 info(f"Completed with {errors} errors and {warnings} warnings.")
 exit(errors > 0)
-

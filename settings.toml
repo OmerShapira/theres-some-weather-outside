@@ -43,12 +43,16 @@ h2 = 0
 [feed]
 items = 6
 
-[nws]
+[api.openmeteo.grid]
+lat = 40.7325
+long = -73.9560
+
+[api.nws]
 station = "ILN"
 
-[nws.grid]
+[api.nws.grid]
 x = 35
 y = 36
 
 [display]
-rotate = true
+rotate = false
