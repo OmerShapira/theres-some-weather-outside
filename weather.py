@@ -77,7 +77,7 @@ WEATHER_API_NWS:str = f"https://api.weather.gov/gridpoints/{station}/{grid_x},{g
 
 lat =  settings['api']['openmeteo']['grid']['lat']
 long = settings['api']['openmeteo']['grid']['long']
-WEATHER_API_OPENMETEO:str = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={long}&hourly=temperature_2m,apparent_temperature,precipitation_probability,precipitation,weathercode,winddirection_10m,windgusts_10m&daily=weathercode,temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,sunrise,sunset,uv_index_max&forecast_days=3&timezone=America%2FNew_York"
+WEATHER_API_OPENMETEO:str = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={long}&hourly=temperature_2m,relativehumidity_2m,apparent_temperature,precipitation_probability,precipitation,weathercode,windspeed_10m&daily=weathercode,temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,sunrise,sunset,uv_index_max&forecast_days=3&timezone=America%2FNew_York"
 
 fonts = {}
 for key, value in settings['text'].items():
@@ -148,6 +148,9 @@ class RenderContext:
 
     def regular_polygon(self, *args, **kwargs):
         self.draw_buffer.regular_polygon(*args, **kwargs)
+
+    def polygon(self, *args, **kwargs):
+        self.draw_buffer.polygon(*args, **kwargs)
     
     def text(self, *args, **kwargs):
         self.draw_buffer.text(*args, **kwargs)
@@ -227,7 +230,6 @@ class WeatherV2:
                     break
             return day_flag
 
-        
         def get_weathercode_url(code:int, time)->str: 
             day_flag = 'd' if is_day(time) else 'n'
             meteo = int(code)
@@ -249,28 +251,28 @@ class WeatherV2:
                            fill=colors['h1'], 
                            anchor='mm')
 
-
         # construct fine graph
 
         x_begin = MARGIN_H + (0 + 0.5) * DIM_COL
         x_end = MARGIN_H + (ITEMS - 1 + 0.5) * DIM_COL
-        # graph_sample_count = min(samples[-1] + 1, len(hourly['time'])) # need to get the last sample in
         graph_sample_count = last_sample - first_sample
 
-        graph_points = []
-        for i, temp in enumerate(hourly['temperature_2m'][first_sample:last_sample]):
+        temp_graph_points = []
+        for i, sample in enumerate(range(first_sample, last_sample)):
+            temp = hourly['temperature_2m'][sample]
+            feels = hourly['temperature_2m'][sample]
             temp_norm = (temp - mintemp) / (maxtemp - mintemp)
             x_temp_point = lerp(x_begin, x_end, i/(graph_sample_count - 1))
             y_temp_point = lerp(Y_GRAPH_TOP, Y_GRAPH_BOTTOM, 1-temp_norm)
-            graph_points.append((x_temp_point,  y_temp_point))
+            temp_graph_points.append((x_temp_point,  y_temp_point))
 
         midpoint = lerp(Y_GRAPH_TOP, Y_GRAPH_BOTTOM, 0.5)
         render['gray'].add(ctx.line, 
-                           graph_points, 
+                           temp_graph_points, 
                            fill=colors['h1'], 
                            width=3)
         render['mono'].add(ctx.line, 
-                           [(graph_points[0][0], midpoint), (graph_points[-1][0],midpoint)], 
+                           [(temp_graph_points[0][0], midpoint), (temp_graph_points[-1][0],midpoint)], 
                            fill=colors['h2'], 
                            width=1)
 
@@ -292,8 +294,9 @@ class WeatherV2:
             # Render Temperature
             temp = hourly['temperature_2m'][sample]
             feels = hourly['apparent_temperature'][sample]
+            rh = hourly['relativehumidity_2m'][sample]
             temptext = f"{temp:.0f}°"
-            feelstext = f"({feels:.0f}°)"
+            feelstext = f"({feels:.0f}°), {rh:.0f}%"
             x = int(MARGIN_H + i * DIM_COL)
             y = Y_LINE2
             render['mono'].add(ctx.text,
@@ -313,7 +316,7 @@ class WeatherV2:
                                anchor='lt')
 
             # Render Wind and Rain
-            wind_speed = hourly['windgusts_10m'][sample]
+            wind_speed = hourly['windspeed_10m'][sample]
             pp = int(hourly['precipitation_probability'][sample])
             windtext = f"{wind_speed:.0f}km/h"
             raintext = f"{pp:.0f}%"
@@ -332,11 +335,6 @@ class WeatherV2:
                                font=fonts['h4'], 
                                fill=colors['h2'])
             if pp > 0:
-                rain_small = graphics['rain'].resize((dim,dim))
-                # render['gray'].add(ctx.paste, 
-                #                    rain_small,
-                #                    (int(x + TAB * 3),y),
-                #                    rain_small)
                 render['mono'].add(ctx.text,
                                    (x + TAB *5,y),
                                    '☔',
@@ -375,6 +373,7 @@ class WeatherV2:
                                (xmid, y + 10, xmid, ygraph - 8),
                                fill=colors['h1'],
                                width=1)
+            #points
             render['mono'].add(ctx.regular_polygon,
                                (xmid, ygraph, 5),
                                n_sides=10,
