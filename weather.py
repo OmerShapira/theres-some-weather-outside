@@ -236,17 +236,34 @@ class WeatherV2:
         weathercode_urls = {i:get_weathercode_url(hourly['weathercode'][i], hourly['time'][i]) for i in samples}
         icons = self.cache_and_scale_icons(set(weathercode_urls.values()))
 
-        x = W // 2
+        x = W // 4 + 20
+        pad = 5
         y = Y_HEADER
 
         t = dateutil.parser.parse(hourly['time'][first_sample])
         temptext = f"{t.hour:02}:00 : {hourly['temperature_2m'][first_sample]:.0f}°c"
+        datetext1 = f"{t.day:02d}"
+        datetext2 = f"{t.month:02d}"
         render['gray'].add(ctx.text,
-                           (x,y),
+                           (x + pad,y),
                            temptext,
                            font=fonts['h1'], 
                            fill=colors['h1'], 
-                           anchor='mm')
+                           anchor='lm')
+        render['gray'].add(ctx.text,
+                           (x - pad,y-1),
+                           datetext1,
+                           font=fonts['sub'], 
+                           fill=colors['h1'], 
+                           anchor='rs',
+                           justify='right')
+        render['gray'].add(ctx.text,
+                           (x - pad,y+1),
+                           datetext2,
+                           font=fonts['sub'], 
+                           fill=colors['h1'], 
+                           anchor='rt',
+                           justify='right')
 
         # construct fine graph
 

@@ -7,6 +7,11 @@ source_file = 'Anton-Regular.ttf'
 web_source = 'https://github.com/google/fonts/blob/main/ofl/anton/Anton-Regular.ttf?raw=true'
 size = 90
 
+[text.sub]
+source_file = 'Anton-Regular.ttf'
+web_source = 'https://github.com/google/fonts/blob/main/ofl/anton/Anton-Regular.ttf?raw=true'
+size = 45
+
 [text.h2]
 source_file = 'Grotesk.ttf'
 web_source = 'https://github.com/google/fonts/blob/main/ofl/schibstedgrotesk/SchibstedGrotesk%5Bwght%5D.ttf?raw=true'
