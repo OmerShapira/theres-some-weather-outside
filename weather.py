@@ -241,7 +241,7 @@ class WeatherV2:
         y = Y_HEADER
 
         t = dateutil.parser.parse(hourly['time'][first_sample])
-        temptext = f"{t.hour:02}:00 : {hourly['temperature_2m'][first_sample]:.0f}°c"
+        temptext = f"{t.hour:02}:00 {hourly['temperature_2m'][first_sample]:.0f}°c"
         datetext1 = f"{t.day:02d}"
         datetext2 = f"{t.month:02d}"
         render['gray'].add(ctx.text,
@@ -264,7 +264,7 @@ class WeatherV2:
                            fill=colors['h1'], 
                            anchor='rt',
                            justify='right')
-
+        
         # construct fine graph
 
         x_begin = MARGIN_H + (0 + 0.5) * DIM_COL
